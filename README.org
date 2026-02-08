@@ -1,0 +1,67 @@
+#+TITLE: org-claude-gh-pr
+
+Org-mode based GitHub PR review plugin for [[https://claude.ai/code][Claude Code]].
+
+* Skills
+
+** handle-pr-feedback
+
+Workflow for addressing code review feedback received on your pull request. Tracks review comments in an Emacs org-mode document through a cyclic process:
+
+1. *Sync* - Fetch review threads, resolution status, and new replies from GitHub
+2. *Analyze* - Assess each comment against the current code and suggest next steps
+3. *Triage* - User provides instructions for code changes and/or PR replies
+4. *Fix & Reply* - Implement changes and post replies
+5. *Finalize* - Sync threads and update document state
+
+Comments are tracked with org-mode TODO states:
+
+#+begin_example
+              new comment on
+              unresolved thread
+         ┌─────────────────────────┐
+         │                         │
+         ▼                         │
+    ┌────────┐                     │
+ ──>│  TODO  │───┐                 │
+    └────────┘   │ start fix       │
+         │       │                 │
+         │       ▼                 │
+         │  ┌────────┐             │
+         │  │  PROG  │─────────────┤
+         │  └────────┘             │
+         │       │                 │
+         │       │ fix done        │
+         │       │                 │
+         │       ▼                 │
+         │  ┌────────┐             │
+         └─>│  WAIT  │─────────────┘
+  reply     └────────┘
+  only           │
+                 │ isResolved=true
+                 ▼
+            ┌────────┐
+            │  DONE  │
+            └────────┘
+
+  Any state → DONE when isResolved=true
+#+end_example
+
+* Install
+
+#+begin_src sh
+/plugin marketplace add manzaltu/org-claude-gh-pr
+/plugin install org-claude-gh-pr@org-claude-gh-pr
+#+end_src
+
+* Local Development
+
+#+begin_src sh
+claude --plugin-dir ~/projects/org-claude-gh-pr
+#+end_src
+
+* License
+
+Copyright (c) 2026 Yoav Orot. All rights reserved.
+
+Licensed under the [[file:LICENSE][GNU General Public License v3.0 or later]].

@@ -1,0 +1,5 @@
+{
+  "name": "org-claude-gh-pr",
+  "description": "Org-mode based GitHub PR review plugin for Claude Code",
+  "version": "1.0.0"
+}

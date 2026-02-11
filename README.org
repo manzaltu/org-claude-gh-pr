@@ -47,6 +47,10 @@ Comments are tracked with org-mode TODO states:
   Any state → DONE when isResolved=true
 #+end_example
 
+*** Team mode
+
+For reviews with 5+ comments, the skill supports a team mode that groups related comments and spawns one sub-agent per group. This keeps each agent's context small and focused. The lead agent owns all shared state (org doc, git) while sub-agents handle analysis or code fixes in isolation. See the skill's =Team Mode= section for details.
+
 * Install
 
 #+begin_src sh

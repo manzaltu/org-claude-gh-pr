@@ -221,3 +221,89 @@ All scripts are in the skill directory. Usage:
 - **Cursor/bot comments:** Group automated comments separately. Many are duplicates - note the primary and mark duplicates.
 - **Pagination:** Always check `totalCount` and `hasNextPage` - PRs can have 100+ threads.
 - **Force-pushed branches:** After force push, some old comments may reference outdated line numbers. Use `originalLine` from the API.
+
+## Team Mode (Parallel Agents)
+
+### Motivation
+
+When a review has many comments, processing them all sequentially in a single agent bloats the context window — by comment #12, all the code reads and edits from #1–11 are still in context, degrading quality. Team mode spawns sub-agents that each handle a small, isolated group of comments so each agent works in a focused context.
+
+### When to Use
+
+- **5+ TODO comments:** Prefer team mode. Context isolation pays off.
+- **Fewer than 5:** Single-agent is fine. The overhead of spawning agents isn't worth it.
+
+### Grouping Comments
+
+Before spawning agents, the lead groups comments so that each group can be handled independently. The principle: **group comments that need each other's context, separate comments that don't.**
+
+Two comments belong in the same group when:
+- They touch the same code (same function, nearby lines, or overlapping edits).
+- They are logically related — e.g., one comment asks to add an error return to a function and another asks to handle that error at a callsite in a different file. An agent fixing one needs to know about the other.
+
+Two comments belong in separate groups when:
+- They are in different files with unrelated concerns.
+- They are in the same file but in clearly unrelated sections.
+
+Reply-only comments (no code change) can be their own group or bundled with a related code-change comment.
+
+A group may contain a single comment or several. The goal is that each agent can do its job without needing context from another group.
+
+### Lead Agent Role
+
+The lead (the agent running this skill) owns all shared state and orchestration:
+
+- **Only the lead** reads and writes the org tracking document.
+- **Only the lead** runs git commands (staging, committing).
+- The lead runs Steps 1, 3, and 5 (Sync, Triage, Finalize) directly — these are not parallelized.
+- The lead orchestrates Steps 2 and 4 by spawning sub-agents via the Task tool.
+
+### Step 2 with Teams: Parallel Analysis
+
+For each group of `TODO` entries, spawn one `general-purpose` Task sub-agent:
+
+**Provide to each agent:**
+- Each entry's full `*** Thread` text (all reviewer messages, verbatim).
+- The file path(s) and line number(s) for all comments in the group.
+- The comment titles / short descriptions.
+
+**Agent task:** Read the relevant code, assess each reviewer concern against the current code, and return analysis text for each comment suggesting concrete next steps (code change, PR reply, or both).
+
+**Agent constraints:**
+- Read-only exploration of the codebase. No edits, no git commands.
+- Return the analysis as plain text in its result, clearly labeled per comment.
+
+**Lead collects** all results and writes each analysis into the corresponding `*Analysis:*` field in the org doc.
+
+All agents run in parallel (one Task call per group, all launched together).
+
+### Step 4 with Teams: Parallel Fix & Reply
+
+For each group of triaged entries (those with `*Your Instructions:*` and/or `*PR Reply:*`), spawn one `general-purpose` Task sub-agent:
+
+**Provide to each agent:**
+- Each entry's `*** Thread` text (for context on what the reviewer asked).
+- The user's instructions from `*Your Instructions:*` for each comment.
+- The PR reply text from `*PR Reply:*` for each comment (if any).
+- The file path(s) and line number(s).
+- The comment `databaseId`(s) (for posting replies).
+- The `post-reply.sh` script path and invocation syntax (`post-reply.sh OWNER REPO PR COMMENT_ID "text"`).
+
+**Agent task:**
+1. Read the relevant code.
+2. Implement the code changes described in each `*Your Instructions:*` exactly as written.
+3. Post PR replies via `post-reply.sh` for each comment with non-empty `*PR Reply:*`. Post the user's text exactly — do not rephrase.
+4. Return a summary per comment: what code was changed (files and description), whether a reply was posted, and any concerns.
+
+**Agent constraints:**
+- **No git commands.** The agent edits files but never stages, commits, or touches git.
+- **No org doc edits.** The agent never modifies the tracking document.
+- **Reply idempotency:** If the agent is retried (e.g., after a failure), it should check the thread for an existing identical reply before posting again to avoid duplicates.
+
+**Lead collects** all results and:
+- Updates each entry's state to `WAIT`.
+- Prefixes `*Your Instructions:*` with `[STALE]`.
+- Appends posted replies to `*** Thread` sections and clears `*PR Reply:*`.
+- Commits all code changes together.
+
+All agents run in parallel (one Task call per group, all launched together).
